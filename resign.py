@@ -99,8 +99,7 @@ if __name__ == '__main__':
           d.write(f.read())
           d.flush()
 
-      #ShellProcess('find "%s" -type f -perm +111 -print0 | xargs -0 codesign --verbose --force --deep -s "%s" --entitlements %s' % (bundle_path, identity, entitlements)).invoked()
-      ShellProcess('codesign --verbose --force --deep -s "%s" --entitlements %s "%s"' % (identity, entitlements, bundle_path)).invoked()
+      ShellProcess('find -E "%s" -depth -regex "^.*\.(app|framework|dylib)" -print0 | xargs -0 codesign --verbose --force -s "%s" --entitlements %s' % (bundle_path, identity, entitlements)).invoked()
       ShellProcess('rm -f "%s"' % target_resigned).invoked()
       ShellProcess('zip -qr "%s" Payload' % target_resigned).invoked()
 
