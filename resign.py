@@ -35,10 +35,15 @@ def merged_entitlements(profile, entitlements):
   a = plistlib.loads(decoded_profile(profile))['Entitlements']
   if entitlements is not None:
     b = plistlib.loads(entitlements)
+    for k in 'get-task-allow',:
+      if k in b:
+        print('merged_entitilements: dropping entitlement key "%s"' % k, file=sys.stderr)
+        del b[k]
     if '.*' in a['application-identifier']:
       for k in 'aps-environment',:
-        print('merged_entitilements: dropping entitlement key "%s" due to we are signing with wildcard provisioning profile' % k, file=sys.stderr)
-        del b[k]
+        if k in b:
+          print('merged_entitilements: dropping entitlement key "%s" due to we are signing with wildcard provisioning profile' % k, file=sys.stderr)
+          del b[k]
     a.update(b)
   return plistlib.dumps(a)
 
