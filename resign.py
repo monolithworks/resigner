@@ -32,10 +32,15 @@ def decoded_profile(profile):
     return bytes(re.search(rb'<\?xml version="1.0".*</plist>', profile, flags=re.DOTALL).group(0))
 
 def merged_entitlements(profile, entitlements):
-  o = plistlib.loads(decoded_profile(profile))['Entitlements']
+  a = plistlib.loads(decoded_profile(profile))['Entitlements']
   if entitlements is not None:
-    o.update(plistlib.loads(entitlements))
-  return plistlib.dumps(o)
+    b = plistlib.loads(entitlements)
+    if '.*' in a['application-identifier']:
+      for k in 'aps-environment',:
+        print('merged_entitilements: dropping entitlement key "%s" due to we are signing with wildcard provisioning profile' % k, file=sys.stderr)
+        del b[k]
+    a.update(b)
+  return plistlib.dumps(a)
 
 if __name__ == '__main__':
   try:
