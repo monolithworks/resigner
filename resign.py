@@ -5,10 +5,14 @@ import glob
 import re
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
 import plistlib
+import getopt
+
+config = dict()
 
 class ShellProcess:
   def __init__(self, cmdline, cwd=None, check=False):
@@ -47,29 +51,48 @@ def merged_entitlements(profile, entitlements):
     a.update(b)
   return plistlib.dumps(a)
 
+def do_resign(identity, provisioning_profile, target, output):
+  identity = shlex.quote(identity)
+  provisioning_profile = shlex.quote(provisioning_profile)
+  target = shlex.quote(target)
+  output = shlex.quote(output)
+
+  with tempfile.TemporaryDirectory() as t:
+    os.chdir(t)
+    ShellProcess('unzip -q "%s"' % target, check=True).invoked()
+    bundle_path = resolved_path_of('Payload', '*.app')
+    shutil.copyfile(provisioning_profile, os.path.join(bundle_path, 'embedded.mobileprovision'))
+
+    with tempfile.NamedTemporaryFile() as tf:
+      try:
+        ent = open(resolved_path_of(bundle_path, '*.xcent'), 'rb').read()
+      except IndexError:
+        ent = None
+      tf.write(merged_entitlements(open(provisioning_profile, 'rb').read(), ent))
+      tf.flush()
+
+      ShellProcess('find -E "%s" -depth -regex "^.*\.(app|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
+
+    ShellProcess('rm -f "%(target)s" && zip -qr "%(target)s" *' % dict(target=output), check=True).invoked()
+
 if __name__ == '__main__':
-  try:
-    target, identity, provisioning_profile = sys.argv[1:]
-  except ValueError:
-    print('%(arg0)s: usage: %(arg0)s <target> <identity> <provisioning_profile>' % dict(arg0=sys.argv[0]))
+  opts, targets = getopt.getopt(sys.argv[1:], 'o:i:p:', ['output=', 'identity=', 'profile='])
+  for o,a in opts:
+    if o in ['-o', '--output']: config['output'] = a
+    if o in ['-i', '--identity']: config['identity'] = a
+    if o in ['-p', '--profile']: config['provisioning_profile'] = a
+
+  if len(targets) != 1 or not all([(x in config) for x in ['identity', 'provisioning_profile']]):
+    print('%(arg0)s: usage: %(arg0)s [--output <outputfile>] --identity <identity> --profile <provisioning_profile> <target>' % dict(arg0=sys.argv[0]))
     sys.exit(2)
-  else:
-    target = os.path.realpath(target)
-    target_resigned = re.sub(r'(.ipa)$', r'-resigned\g<1>', target, flags=re.IGNORECASE)
-    with tempfile.TemporaryDirectory() as t:
-      os.chdir(t)
-      ShellProcess('unzip -q "%s"' % target, check=True).invoked()
-      bundle_path = resolved_path_of('Payload', '*.app')
-      shutil.copyfile(provisioning_profile, os.path.join(bundle_path, 'embedded.mobileprovision'))
 
-      with tempfile.NamedTemporaryFile() as tf:
-        try:
-          ent = open(resolved_path_of(bundle_path, '*.xcent'), 'rb').read()
-        except IndexError:
-          ent = None
-        tf.write(merged_entitlements(open(provisioning_profile, 'rb').read(), ent))
-        tf.flush()
+  output = config.get('output')
+  if not output:
+    output = re.sub(r'(.ipa)$', r'-resigned\g<1>', targets[0], flags=re.IGNORECASE)
 
-        ShellProcess('find -E "%s" -depth -regex "^.*\.(app|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
-
-      ShellProcess('rm -f "%(target)s" && zip -qr "%(target)s" *' % dict(target=target_resigned), check=True).invoked()
+  do_resign(
+    identity=config['identity'],
+    provisioning_profile=os.path.realpath(config['provisioning_profile']),
+    target=os.path.realpath(targets[0]),
+    output=os.path.realpath(output),
+  )
