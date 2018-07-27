@@ -59,7 +59,7 @@ def do_resign(identity, provisioning_profile, target, output):
 
   with tempfile.TemporaryDirectory() as t:
     os.chdir(t)
-    ShellProcess('unzip -q "%s"' % target, check=True).invoked()
+    ShellProcess('unzip -q %s' % target, check=True).invoked()
     bundle_path = resolved_path_of('Payload', '*.app')
     shutil.copyfile(provisioning_profile, os.path.join(bundle_path, 'embedded.mobileprovision'))
 
@@ -73,7 +73,7 @@ def do_resign(identity, provisioning_profile, target, output):
 
       ShellProcess('find -E "%s" -depth -regex "^.*\.(app|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
 
-    ShellProcess('rm -f "%(target)s" && zip -qr "%(target)s" *' % dict(target=output), check=True).invoked()
+    ShellProcess('rm -f %(target)s && zip -qr %(target)s *' % dict(target=output), check=True).invoked()
 
 if __name__ == '__main__':
   opts, targets = getopt.getopt(sys.argv[1:], 'o:i:p:', ['output=', 'identity=', 'profile='])
