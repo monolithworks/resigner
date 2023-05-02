@@ -1,14 +1,8 @@
 """resigner is an iOS app re-signer."""
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import glob
 import re
 import os
-import shutil
-import shlex
-import subprocess
-import tempfile
-import plistlib
 
 import logging
 
@@ -26,13 +20,15 @@ class ShellProcess:
     self._check = check
 
   def invoked(self) -> str:
-    return self._as_str(subprocess.run(self._cmdline, cwd=self._cwd, shell=True, check=self._check, stdout=subprocess.PIPE).stdout)
+    from subprocess import run, PIPE
+    return self._as_str(run(self._cmdline, cwd=self._cwd, shell=True, check=self._check, stdout=PIPE).stdout)
 
   def _as_str(self, x: bytes) -> str:
     return x.decode('utf-8')
 
 def resolved_path_of(path: str, mask: str) -> str:
-  return glob.glob(os.path.join(path, mask))[0]
+  from glob import glob
+  return glob(os.path.join(path, mask))[0]
 
 def decoded_profile(profile: bytes) -> bytes:
   m = re.search(rb'<\?xml version="1.0".*</plist>', profile, flags=re.DOTALL)
@@ -40,6 +36,7 @@ def decoded_profile(profile: bytes) -> bytes:
   return bytes(m.group(0))
 
 def merged_entitlements(profile: bytes, entitlements: Optional[bytes]) -> bytes:
+  import plistlib
   a = plistlib.loads(decoded_profile(profile))['Entitlements']
   if entitlements is not None:
     b = plistlib.loads(entitlements, fmt=plistlib.FMT_XML)
@@ -56,6 +53,10 @@ def merged_entitlements(profile: bytes, entitlements: Optional[bytes]) -> bytes:
   return plistlib.dumps(a)
 
 def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[str], target: str, output: str) -> None:
+  import shlex
+  import shutil
+  import tempfile
+
   identity = shlex.quote(identity)
   provisioning_profile = shlex.quote(provisioning_profile)
   target = shlex.quote(target)
