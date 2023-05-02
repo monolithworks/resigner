@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-# resign.sh: iOS app re-signing exploit
-# Copyright (C) 2015-2017 Takahiro and Ken-ya Yoshimura.  All rights reserved.
+"""resigner is an iOS app re-signer."""
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import glob
@@ -15,6 +13,8 @@ import plistlib
 
 if TYPE_CHECKING:
   from typing import Optional
+
+__version__ = '1.0.0'
 
 class ShellProcess:
   def __init__(self, cmdline: str, cwd: Optional[str] = None, check: bool = False) -> None:
@@ -52,7 +52,7 @@ def merged_entitlements(profile: bytes, entitlements: Optional[bytes]) -> bytes:
     a.update(b)
   return plistlib.dumps(a)
 
-def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[bytes], target: str, output: str) -> None:
+def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[str], target: str, output: str) -> None:
   identity = shlex.quote(identity)
   provisioning_profile = shlex.quote(provisioning_profile)
   target = shlex.quote(target)
@@ -80,8 +80,7 @@ def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[by
 
     ShellProcess('rm -f %(target)s && zip -qr %(target)s *' % dict(target=output), check=True).invoked()
 
-
-if __name__ == '__main__':
+def entry() -> None:
   from argparse import ArgumentParser
 
   parser = ArgumentParser(description='iOS app resigner.')
