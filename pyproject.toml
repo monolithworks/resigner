@@ -1,0 +1,9 @@
+[tool.mypy]
+strict = true
+show_error_codes = true
+enable_error_code = "redundant-expr"
+
+# pyproject-flake8 (pflake8)
+[tool.flake8]
+extend-ignore = "E301,E302,E265,E114,E501,E231,E252,E261,E701,E722,E741,F821"
+indent-size = 2

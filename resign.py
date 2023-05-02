@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # resign.sh: iOS app re-signing exploit
 # Copyright (C) 2015-2017 Takahiro and Ken-ya Yoshimura.  All rights reserved.
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import glob
 import re
 import os
@@ -10,32 +12,31 @@ import subprocess
 import sys
 import tempfile
 import plistlib
-import getopt
 
-config = dict()
+if TYPE_CHECKING:
+  from typing import Optional
 
 class ShellProcess:
-  def __init__(self, cmdline, cwd=None, check=False):
+  def __init__(self, cmdline: str, cwd: Optional[str] = None, check: bool = False) -> None:
     self._cmdline = cmdline
     self._cwd = cwd
     self._check = check
 
-  def invoked(self):
+  def invoked(self) -> str:
     return self._as_str(subprocess.run(self._cmdline, cwd=self._cwd, shell=True, check=self._check, stdout=subprocess.PIPE).stdout)
 
-  def _as_str(self, x):
-    if x is not None:
-      return x.decode('utf-8')
-    else:
-      return None
+  def _as_str(self, x: bytes) -> str:
+    return x.decode('utf-8')
 
-def resolved_path_of(path, mask):
+def resolved_path_of(path: str, mask: str) -> str:
   return glob.glob(os.path.join(path, mask))[0]
 
-def decoded_profile(profile):
-    return bytes(re.search(rb'<\?xml version="1.0".*</plist>', profile, flags=re.DOTALL).group(0))
+def decoded_profile(profile: bytes) -> bytes:
+  m = re.search(rb'<\?xml version="1.0".*</plist>', profile, flags=re.DOTALL)
+  assert m
+  return bytes(m.group(0))
 
-def merged_entitlements(profile, entitlements):
+def merged_entitlements(profile: bytes, entitlements: Optional[bytes]) -> bytes:
   a = plistlib.loads(decoded_profile(profile))['Entitlements']
   if entitlements is not None:
     b = plistlib.loads(entitlements, fmt=plistlib.FMT_XML)
@@ -51,7 +52,7 @@ def merged_entitlements(profile, entitlements):
     a.update(b)
   return plistlib.dumps(a)
 
-def do_resign(identity, provisioning_profile, entitlement, target, output):
+def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[bytes], target: str, output: str) -> None:
   identity = shlex.quote(identity)
   provisioning_profile = shlex.quote(provisioning_profile)
   target = shlex.quote(target)
@@ -75,30 +76,29 @@ def do_resign(identity, provisioning_profile, entitlement, target, output):
       tf.write(merged_entitlements(open(provisioning_profile, 'rb').read(), ent))
       tf.flush()
 
-      ShellProcess('find -E "%s" -depth -regex "^.*\.(app|appex|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --deep --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
+      ShellProcess(r'find -E "%s" -depth -regex "^.*\.(app|appex|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --deep --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
 
     ShellProcess('rm -f %(target)s && zip -qr %(target)s *' % dict(target=output), check=True).invoked()
 
+
 if __name__ == '__main__':
-  opts, targets = getopt.getopt(sys.argv[1:], 'o:i:p:', ['output=', 'identity=', 'profile=', 'entitlement='])
-  for o,a in opts:
-    if o in ['-o', '--output']: config['output'] = a
-    if o in ['-i', '--identity']: config['identity'] = a
-    if o in ['-p', '--profile']: config['provisioning_profile'] = a
-    if o in ['-e', '--entitlement']: config['entitlement'] = a
+  from argparse import ArgumentParser
 
-  if len(targets) != 1 or not all([(x in config) for x in ['identity', 'provisioning_profile']]):
-    print('%(arg0)s: usage: %(arg0)s [--output <outputfile>] [--entitilement <ent.xcent>] --identity <identity> --profile <provisioning_profile> <target>' % dict(arg0=sys.argv[0]))
-    sys.exit(2)
+  parser = ArgumentParser(description='iOS app resigner.')
+  parser.add_argument('target')
+  parser.add_argument('-o', '--output', help='Output filename')
+  parser.add_argument('-i', '--identity', required=True, help='Identity to use, typically fingerprint of the certificate')
+  parser.add_argument('-p', '--profile', required=True, help='Provisioning profile file to use')
+  parser.add_argument('-e', '--entitlement', help='Entitlement to include, if any')
+  args = parser.parse_args()
 
-  output = config.get('output')
-  if not output:
-    output = re.sub(r'(.ipa)$', r'-resigned\g<1>', targets[0], flags=re.IGNORECASE)
+  if not args.output:
+    args.output = re.sub(r'(.ipa)$', r'-resigned\g<1>', args.target, flags=re.IGNORECASE)
 
   do_resign(
-    identity=config['identity'],
-    provisioning_profile=os.path.realpath(config['provisioning_profile']),
-    entitlement=os.path.realpath(config['entitlement']) if 'entitlement' in config else None,
-    target=os.path.realpath(targets[0]),
-    output=os.path.realpath(output),
+    identity=args.identity,
+    provisioning_profile=os.path.realpath(args.profile),
+    entitlement=os.path.realpath(args.entitlement) if args.entitlement else None,
+    target=os.path.realpath(args.target),
+    output=os.path.realpath(args.output),
   )
