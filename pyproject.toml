@@ -3,7 +3,7 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = 'resign'
+name = 'resigner'
 authors = [
   {name='Takahiro Yoshimura', email='takahiro_y@monolithworks.co.jp'},
   {name='Ken-ya Yoshimura', email='kenya_y@monolithworks.co.jp'},
@@ -27,7 +27,7 @@ dev = [
 Source = "https://github.com/monolithworks/resigner"
 
 [project.scripts]
-resign = "resign:entry"
+resigner = "resigner:entry"
 
 [tool.mypy]
 strict = true
