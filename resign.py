@@ -7,9 +7,12 @@ import os
 import shutil
 import shlex
 import subprocess
-import sys
 import tempfile
 import plistlib
+
+import logging
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
   from typing import Optional
@@ -42,12 +45,12 @@ def merged_entitlements(profile: bytes, entitlements: Optional[bytes]) -> bytes:
     b = plistlib.loads(entitlements, fmt=plistlib.FMT_XML)
     for k in 'get-task-allow',:
       if k in b:
-        print('merged_entitilements: dropping entitlement key "%s"' % k, file=sys.stderr)
+        log.warn(f'[*] merged_entitilements: dropping entitlement key "{k}"')
         del b[k]
     if '.*' in a['application-identifier']:
       for k in 'aps-environment',:
         if k in b:
-          print('merged_entitilements: dropping entitlement key "%s" due to we are signing with wildcard provisioning profile' % k, file=sys.stderr)
+          log.warn(f'[*] merged_entitilements: dropping entitlement key "{k}" due to we are signing with wildcard provisioning profile')
           del b[k]
     a.update(b)
   return plistlib.dumps(a)
@@ -60,9 +63,11 @@ def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[st
 
   with tempfile.TemporaryDirectory() as t:
     os.chdir(t)
-    ShellProcess('unzip -q %s' % target, check=True).invoked()
+    log.info('[.] extracting ipa')
+    ShellProcess(f'unzip -q {target}', check=True).invoked()
     bundle_path = resolved_path_of('Payload', '*.app')
-    profiled_paths = [l for l in ShellProcess('find "%s" -name "embedded.mobileprovision" -print0' % (bundle_path), check=True).invoked().split('\0') if l]
+    log.info('[.] manipulating profile and entitlements')
+    profiled_paths = [l for l in ShellProcess(f'find "{bundle_path}" -name "embedded.mobileprovision" -print0', check=True).invoked().split('\0') if l]
     for l in profiled_paths:
         shutil.copyfile(provisioning_profile, l)
     if entitlement is not None:
@@ -76,12 +81,16 @@ def do_resign(identity: str, provisioning_profile: str, entitlement: Optional[st
       tf.write(merged_entitlements(open(provisioning_profile, 'rb').read(), ent))
       tf.flush()
 
-      ShellProcess(r'find -E "%s" -depth -regex "^.*\.(app|appex|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "%s" --deep --entitlements %s' % (bundle_path, identity, tf.name), check=True).invoked()
+      log.info('[.] replacing signatures')
+      ShellProcess(r'find -E "{}" -depth -regex "^.*\.(app|appex|framework|dylib|car)" -print0 | xargs -0 codesign -vvvvf -s "{}" --deep --entitlements {}'.format(bundle_path, identity, tf.name), check=True).invoked()
 
-    ShellProcess('rm -f %(target)s && zip -qr %(target)s *' % dict(target=output), check=True).invoked()
+    log.info('[.] generating ipa')
+    ShellProcess('rm -f {target} && zip -qr {target} *'.format(target=output), check=True).invoked()
 
 def entry() -> None:
   from argparse import ArgumentParser
+
+  logging.basicConfig(level=logging.INFO, format='%(message)s')
 
   parser = ArgumentParser(description='iOS app resigner.')
   parser.add_argument('target')
@@ -94,6 +103,11 @@ def entry() -> None:
   if not args.output:
     args.output = re.sub(r'(.ipa)$', r'-resigned\g<1>', args.target, flags=re.IGNORECASE)
 
+  if not args.entitlement:
+    log.info(f'[+] resigning {args.target} with profile {args.profile} and identity {args.identity}')
+  else:
+    log.info(f'[+] resigning {args.target} with profile {args.profile} and identity {args.identity}, including entitlements {args.entitlement}')
+
   do_resign(
     identity=args.identity,
     provisioning_profile=os.path.realpath(args.profile),
@@ -101,3 +115,5 @@ def entry() -> None:
     target=os.path.realpath(args.target),
     output=os.path.realpath(args.output),
   )
+
+  log.info('[+] done')
